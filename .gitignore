@@ -1,0 +1,32 @@
+# Security
+.env
+.env.*
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Local Database / Logs
+*.log
+
+# Docker (local volumes)
+docker-data/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
