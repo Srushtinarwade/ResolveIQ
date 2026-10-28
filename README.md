@@ -2,6 +2,22 @@
 
 ResolveIQ is an AI-assisted incident and change-request resolution service built with **FastAPI**, **LangGraph**, **Google Gemini**, **PostgreSQL**, and **pgvector**. It accepts ServiceNow ticket webhooks, summarizes the reported issue, retrieves similar historical resolutions, generates a proposed resolution plan, and can post that plan back to the originating ticket.
 
+
+> **Reported evaluation snapshot:** **85% resolution success across 200 held-out IT tickets** (equivalent to 170 successful tickets out of 200). This is a reported result; the repository does not currently include the ticket-level evaluation sheet needed to independently reproduce it.
+
+## Evaluation Methodology
+
+The success rate should be calculated against a fixed set of **200 held-out IT tickets** that were not used to build or tune the system:
+
+1. Generate a proposed resolution for each ticket using the same configured workflow.
+2. Compare each generated resolution with a verified reference resolution.
+3. Score each response against a predefined rubric covering **correctness, relevance, completeness, and safety**. Count a ticket as successful only when it meets the rubric's pass criteria.
+4. Calculate the overall success rate:
+
+   \\[ \\text{Success Rate}=\\frac{\\text{Successfully evaluated tickets}}{200}\\times100\\% \\]
+
+For example, if 170 of the 200 tickets pass all required rubric criteria, the success rate is **85%**. To make the reported result reproducible, publish an anonymized score sheet with per-ticket pass/fail outcomes, the rubric, and the reference/evaluation procedure. Do not include confidential ServiceNow ticket text or credentials.
+
 ## How It Works
 
 ```text
