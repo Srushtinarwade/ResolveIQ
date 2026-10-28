@@ -1,154 +1,198 @@
 # ResolveIQ — AI-Powered ServiceNow Resolution Engine
 
-An intelligent incident and change request resolution engine built with **LangGraph**, **Gemini**, and **pgvector**. It receives ServiceNow tickets via webhooks, analyzes them using AI, retrieves similar past resolutions from a vector database, and posts an AI-generated resolution plan back to ServiceNow.
+ResolveIQ is an AI-assisted incident and change-request resolution service built with **FastAPI**, **LangGraph**, **Google Gemini**, **PostgreSQL**, and **pgvector**. It accepts ServiceNow ticket webhooks, summarizes the reported issue, retrieves similar historical resolutions, generates a proposed resolution plan, and can post that plan back to the originating ticket.
 
-## Architecture
+## How It Works
 
-```
+```text
 ServiceNow Webhook
-        │
-        ▼
-   ┌─────────┐
-   │ FastAPI  │  ← Validates incoming tickets (Pydantic)
-   └────┬────┘
-        │ background task
-        ▼
-┌──────────────────────────── LangGraph Workflow ──────────────────────────────┐
-│                                                                              │
-│  summarize_ticket  →  retrieve_context  →  generate_solution  →  post_to_sn │
-│       (Gemini)         (pgvector)             (Gemini)          (REST API)   │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
+        |
+        v
+  FastAPI + Pydantic
+        |
+        v
+  LangGraph Workflow
+  1. Summarize ticket with Gemini
+  2. Retrieve similar resolved tickets from pgvector
+  3. Generate a proposed resolution with Gemini
+  4. Post the plan to ServiceNow
+        |
+        v
+ServiceNow work note
 ```
 
-### Graph Nodes
+## Core Components
 
-| Node | Purpose |
+| Component | Purpose |
 |---|---|
-| `summarize_ticket` | Extracts the core technical issue from noisy ticket data using Gemini |
-| `retrieve_context` | Searches pgvector for similar historically resolved tickets |
-| `generate_solution` | Generates a structured resolution plan using the summary + historical context |
-| `post_to_servicenow` | Pushes the AI-generated plan back to the ServiceNow ticket as a work note |
+| FastAPI | Exposes webhook and ingestion endpoints |
+| Pydantic | Validates and structures incoming ticket data |
+| LangGraph | Orchestrates the ticket-analysis workflow |
+| Google Gemini | Summarizes tickets and drafts proposed resolutions |
+| PostgreSQL + pgvector | Stores embeddings and retrieves similar historical tickets |
+| ServiceNow REST API | Receives the proposed resolution as a work note |
+| LangSmith | Provides tracing and observability hooks |
 
-### Ingestion Pipeline
+## Data Ingestion
 
-Resolved tickets are ingested via separate endpoints, summarized by Gemini, and stored as embeddings in pgvector — building the knowledge base that powers the retrieval step.
+ResolveIQ can ingest resolved incidents and change requests. The ingestion flow summarizes each resolved ticket and stores the resulting text with relevant metadata in the vector database. This historical knowledge is used as retrieval context when a new ticket is analyzed.
+
+## API Endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/incident/new` | Accepts a new incident for analysis |
+| `POST` | `/change/new` | Accepts a new change request for analysis |
+| `POST` | `/incident/resolved` | Ingests a resolved incident |
+| `POST` | `/change/resolved` | Ingests a resolved change request |
+| `POST` | `/ingest/batch` | Accepts a batch of resolved tickets |
+
+The webhook routes use a shared dependency for request verification. Configure the matching secret and credentials in your local environment before testing integrations.
 
 ## Project Structure
 
-```
+```text
 now-resolve/
-├── main.py                          # FastAPI app + webhook endpoints
+├── main.py
+├── dependencies.py
 ├── graph/
-│   └── workflow.py                  # LangGraph state graph definition
+│   └── workflow.py
 ├── nodes/
-│   ├── summarize_ticket_node.py     # Ticket summarization node
-│   ├── retrieve_historical_context_node.py  # Vector similarity search node
-│   ├── generate_resolution_node.py  # AI resolution generation node
-│   └── post_result_to_servicenow_node.py    # ServiceNow API push node
-├── states/
-│   └── analyzer_state.py            # LangGraph state schema (TypedDict)
+│   ├── summarize_ticket_node.py
+│   ├── retrieve_historical_context_node.py
+│   ├── generate_resolution_node.py
+│   └── post_result_to_servicenow_node.py
 ├── models/
-│   └── ticket_models.py             # Pydantic models for ticket validation
+│   └── ticket_models.py
+├── routers/
+│   ├── analyze.py
+│   └── ingest.py
+├── states/
+│   └── analyzer_state.py
 ├── utils/
-│   ├── db_utils.py                  # Database + embeddings singletons
-│   └── insert_ticket_util.py        # Resolved ticket ingestion logic
-├── Dockerfile                       # Production container setup
-├── requirements.txt                 # Pinned Python dependencies
-└── .env                             # Environment variables (not in git)
+│   ├── db_utils.py
+│   ├── insert_ticket_util.py
+│   ├── checkpointer.py
+│   └── logging_config.py
+├── Dockerfile
+└── requirements.txt
 ```
 
 ## Prerequisites
 
-- **Python 3.13+**
-- **Docker** (for PostgreSQL + pgvector)
-- **Google Gemini API key**
-- **ServiceNow instance** (for webhook integration)
+- Python 3.13 or a compatible version for the pinned dependencies
+- Docker
+- A Google Gemini API key
+- A PostgreSQL database with pgvector
+- A ServiceNow instance and credentials for end-to-end integration testing
 
 ## Setup
 
-### 1. Clone and install dependencies
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/rushikeshnarwade/resolveiq.git
-cd resolveiq
+git clone https://github.com/Srushtinarwade/ResolveIQ.git
+cd ResolveIQ
 python -m venv .venv
+```
+
+Activate the virtual environment:
+
+**macOS / Linux**
+```bash
 source .venv/bin/activate
-pip install -r requirements.txt
+```
+
+**Windows PowerShell**
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```bash
+python -m pip install -r requirements.txt
 ```
 
 ### 2. Start PostgreSQL with pgvector
+
+For local experimentation, you can start a PostgreSQL container with the pgvector image:
 
 ```bash
 docker run -d \
   --name resolveiq-db \
   -e POSTGRES_USER=admin \
-  -e POSTGRES_PASSWORD=admin \
+  -e POSTGRES_PASSWORD=change_me \
   -e POSTGRES_DB=analyzer \
   -p 5432:5432 \
   pgvector/pgvector:pg16
 ```
 
+Use a non-default password in any environment that is not disposable. If you already have a PostgreSQL/pgvector instance, use its connection string instead.
+
 ### 3. Configure environment variables
 
-Create a `.env` file in the project root:
+Create a local `.env` file in the project root. Keep real credentials out of source control.
 
 ```env
-# Google Gemini
 GEMINI_API_KEY=your_gemini_api_key
+DATABASE_URL=postgresql://admin:change_me@localhost:5432/analyzer
 
-# PostgreSQL (pgvector)
-DATABASE_URL=postgresql://admin:admin@localhost:5432/analyzer
-
-# ServiceNow
 SNOW_INSTANCE=your_instance_name
 SNOW_USERNAME=your_username
 SNOW_PASSWORD=your_password
+
+# Set this if required by the webhook verification dependency:
+WEBHOOK_SECRET=your_webhook_secret
 ```
 
-### 4. Start the server
+Use the exact environment-variable names expected by the code and your ServiceNow configuration. Do not commit API keys, passwords, tokens, or production credentials.
+
+### 4. Run the API
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/incident/new` | Receive a new incident → analyze → post resolution |
-| `POST` | `/change/new` | Receive a new change request → analyze → post resolution |
-| `POST` | `/incident/resolved` | Ingest a resolved incident into the knowledge base |
-| `POST` | `/change/resolved` | Ingest a resolved change request into the knowledge base |
-| `POST` | `/ingest/batch` | Bulk ingest an array of resolved tickets |
+When the service starts successfully, the API is normally available at `http://localhost:8000`; FastAPI's interactive documentation is at `http://localhost:8000/docs`.
 
 ## Deployment
 
 ### Docker
 
+Build the image:
+
 ```bash
 docker build -t resolveiq .
-docker run -p 8000:8000 --env-file .env resolveiq
+```
+
+Run it with environment variables supplied from your local environment file:
+
+```bash
+docker run --env-file .env -p 8000:8000 resolveiq
 ```
 
 ### Google Cloud Run
 
-```bash
-gcloud run deploy resolveiq \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated
-```
+The application can be containerized for Cloud Run. Configure secrets and environment variables in the deployment environment before exposing any webhook endpoint. Review authentication and access controls before enabling unauthenticated access.
 
-Set environment variables via the Cloud Run console or `--set-env-vars`.
+## Security Notes
 
-## Tech Stack
+- Keep `.env` and all credentials out of Git.
+- Replace example database credentials before use beyond local experimentation.
+- Restrict webhook access using the configured verification dependency.
+- Use least-privilege ServiceNow credentials and rotate secrets if they are exposed.
 
-- **[FastAPI](https://fastapi.tiangolo.com/)** — Async web framework
-- **[LangGraph](https://langchain-ai.github.io/langgraph/)** — Stateful AI workflow orchestration
-- **[Gemini 2.5 Flash](https://ai.google.dev/)** — LLM for summarization and resolution generation
-- **[pgvector](https://github.com/pgvector/pgvector)** — Vector similarity search on PostgreSQL
-- **[LangChain](https://python.langchain.com/)** — LLM chain composition and embeddings
-- **[Pydantic](https://docs.pydantic.dev/)** — Request validation and data modeling
+## Technology Stack
+
+- [FastAPI](https://fastapi.tiangolo.com/) — web API framework
+- [LangGraph](https://langchain-ai.github.io/langgraph/) — stateful workflow orchestration
+- [Google Gemini](https://ai.google.dev/) — language model for ticket summarization and resolution drafting
+- [PostgreSQL](https://www.postgresql.org/) and [pgvector](https://github.com/pgvector/pgvector) — persistent vector retrieval
+- [LangChain](https://python.langchain.com/) — LLM and embedding integrations
+- [Pydantic](https://docs.pydantic.dev/) — data validation
+- [LangSmith](https://www.langchain.com/langsmith) — tracing and observability
+
+## Notes
+
+ResolveIQ generates **proposed** resolutions to support incident handling; validate generated plans before relying on them for operational changes. Actual end-to-end behavior depends on valid configuration, reachable external services, and appropriate ServiceNow permissions.
