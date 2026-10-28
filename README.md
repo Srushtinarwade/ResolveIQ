@@ -14,7 +14,7 @@ The success rate should be calculated against a fixed set of **200 held-out IT t
 3. Score each response against a predefined rubric covering **correctness, relevance, completeness, and safety**. Count a ticket as successful only when it meets the rubric's pass criteria.
 4. Calculate the overall success rate:
 
-   \\[ \\text{Success Rate}=\\frac{\\text{Successfully evaluated tickets}}{200}\\times100\\% \\]
+   \[ \text{Success Rate}=\frac{\text{Successfully evaluated tickets}}{200}\times100\% \]
 
 For example, if 170 of the 200 tickets pass all required rubric criteria, the success rate is **85%**. To make the reported result reproducible, publish an anonymized score sheet with per-ticket pass/fail outcomes, the rubric, and the reference/evaluation procedure. Do not include confidential ServiceNow ticket text or credentials.
 
